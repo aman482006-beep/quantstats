@@ -197,6 +197,35 @@ class TestBenchmarkComparison:
         result = stats.information_ratio(sample_returns, sample_benchmark)
         assert np.isfinite(result)
 
+    def test_information_ratio_compounded_uses_geometric_active_return(self):
+        """Compounded mode compares geometric strategy and benchmark returns."""
+        returns = pd.Series([0.10, -0.05, 0.20])
+        benchmark = pd.Series([0.02, 0.01, 0.03])
+        active = returns - benchmark
+        tracking_error = active.std()
+        expected_active_return = (
+            np.prod(1 + returns) ** (1 / len(returns))
+            - np.prod(1 + benchmark) ** (1 / len(benchmark))
+        )
+
+        result = stats.information_ratio(
+            returns, benchmark, prepare_returns=False, compounded=True
+        )
+        np.testing.assert_allclose(
+            result, expected_active_return / tracking_error
+        )
+
+    def test_information_ratio_default_remains_arithmetic(self):
+        """The default Information Ratio keeps its legacy arithmetic numerator."""
+        returns = pd.Series([0.10, -0.05, 0.20])
+        benchmark = pd.Series([0.02, 0.01, 0.03])
+        active = returns - benchmark
+
+        result = stats.information_ratio(
+            returns, benchmark, prepare_returns=False
+        )
+        np.testing.assert_allclose(result, active.mean() / active.std())
+
     def test_treynor_ratio(self, sample_returns, sample_benchmark):
         """Test Treynor Ratio calculation."""
         result = stats.treynor_ratio(sample_returns, sample_benchmark)
