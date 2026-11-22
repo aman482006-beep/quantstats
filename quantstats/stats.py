@@ -2881,19 +2881,20 @@ def r2(returns, benchmark):
     return r_squared(returns, benchmark)
 
 
-def information_ratio(returns, benchmark, prepare_returns=True):
+def information_ratio(returns, benchmark, prepare_returns=True, compounded=False):
     """
     Calculate the Information Ratio.
 
-    The Information Ratio measures the risk-adjusted excess return of a
-    portfolio relative to a benchmark. It's calculated as the active return
-    (return - benchmark) divided by the tracking error (standard deviation
-    of active returns).
+    The Information Ratio measures active return relative to tracking error.
+    By default, active return is the arithmetic mean of periodic excess
+    returns. Set ``compounded=True`` to use the difference between the
+    strategy and benchmark geometric mean returns instead.
 
     Args:
         returns (pd.Series): Return series to analyze
         benchmark (pd.Series): Benchmark return series for comparison
         prepare_returns (bool): Whether to prepare returns first (default: True)
+        compounded (bool): Use geometric mean active return (default: False)
 
     Returns:
         float: Information Ratio
@@ -2902,27 +2903,34 @@ def information_ratio(returns, benchmark, prepare_returns=True):
         >>> returns = pd.Series([0.01, -0.02, 0.03, -0.01, 0.02])
         >>> benchmark = pd.Series([0.005, -0.01, 0.02, -0.005, 0.015])
         >>> info_ratio = information_ratio(returns, benchmark)
-        >>> print(f"Information Ratio: {info_ratio:.4f}")
+        >>> compounded_ratio = information_ratio(returns, benchmark, compounded=True)
     """
     if prepare_returns:
         returns = _utils._prepare_returns(returns)
 
-    # Prepare benchmark to match returns index
     benchmark = _utils._prepare_benchmark(benchmark, returns.index)
-
-    # Calculate active returns (returns - benchmark). The already-prepared
-    # benchmark is used directly; preparing it a second time here re-ran the
-    # price/return detection on data that had just been normalized.
     diff_rets = returns - benchmark
-
-    # Calculate tracking error (standard deviation of active returns)
     std = diff_rets.std()
 
-    # Return Information Ratio (active return / tracking error)
-    if std != 0:
-        return diff_rets.mean() / std
-    return 0
+    if compounded:
+        # Compare both geometric growth rates over identical observations.
+        paired_returns, paired_benchmark = _paired_observations(returns, benchmark)
+        observations = len(paired_returns)
+        if observations == 0:
+            return _np.nan
+        strategy_growth = _np.prod(1 + paired_returns)
+        benchmark_growth = _np.prod(1 + paired_benchmark)
+        active_return = (
+            _np.power(strategy_growth, 1.0 / observations)
+            - _np.power(benchmark_growth, 1.0 / observations)
+        )
+    else:
+        # Preserve the historical arithmetic-mean definition by default.
+        active_return = diff_rets.mean()
 
+    if std != 0:
+        return active_return / std
+    return 0
 
 def greeks(returns, benchmark, periods=252.0, prepare_returns=True):
     """
